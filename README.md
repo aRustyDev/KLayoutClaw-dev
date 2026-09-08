@@ -55,16 +55,17 @@ python tests/test_connection.py
 claude mcp add --transport http klayoutclaw "$KLAYOUT_MCP_URL"
 ```
 
-The marketplace plugin's `.mcp.json` starts a plugin-owned launcher through
-`CLAUDE_PLUGIN_ROOT`. That launcher reads `KLAYOUT_MCP_URL` itself because
-Claude Desktop may pass ordinary `${VAR:-default}` MCP arguments literally.
-Restarting Desktop after `launchctl setenv` therefore redirects the installed
-plugin without editing its cached files. Update any separately registered MCP
-entry rather than adding a duplicate. The generic `mcp_config.json` sample is
-intentionally static and portable: either edit its `url` directly or invoke it
-through a client that honors `KLAYOUT_MCP_URL`; it does not use Claude-specific
-environment interpolation. To restore the default for subsequently launched
-applications, unset both variables and restart KLayout and Claude Desktop:
+The marketplace plugin's `.mcp.json` uses an inline POSIX shell command that
+reads `KLAYOUT_MCP_URL` itself. It deliberately avoids plugin-root and
+`${VAR:-default}` placeholders because Claude Desktop may pass those arguments
+literally. Restarting Desktop after `launchctl setenv` therefore redirects the
+installed plugin without editing its cached files. Update any separately
+registered MCP entry rather than adding a duplicate. The generic
+`mcp_config.json` sample is intentionally static and portable: either edit its
+`url` directly or invoke it through a client that honors `KLAYOUT_MCP_URL`; it
+does not use Claude-specific environment interpolation. To restore the default
+for subsequently launched applications, unset both variables and restart
+KLayout and Claude Desktop:
 
 ```bash
 launchctl unsetenv KLAYOUT_MCP_PORT
