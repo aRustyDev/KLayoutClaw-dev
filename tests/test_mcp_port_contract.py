@@ -4,6 +4,7 @@ import ast
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 import types
 import xml.etree.ElementTree as ET
@@ -16,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SERVER_MACRO = ROOT / "plugin" / "klayoutclaw_server.lym"
 UI_MACRO = ROOT / "plugin" / "klayoutclaw_ui.lym"
 DEFAULT_URL = "http://127.0.0.1:8765/mcp"
-PLUGIN_URL_ARG = "${KLAYOUT_MCP_URL:-http://127.0.0.1:8765/mcp}"
+PLUGIN_LAUNCHER_ARG = "${CLAUDE_PLUGIN_ROOT}/scripts/launch-mcp-remote.sh"
 
 
 def _macro_tree(path: Path) -> ast.Module:
@@ -226,7 +227,9 @@ def test_active_default_endpoint_contract():
     assert direct["mcpServers"]["klayoutclaw"]["url"] == DEFAULT_URL
 
     proxy = json.loads((ROOT / ".mcp.json").read_text())
-    assert proxy["mcpServers"]["klayoutclaw"]["args"][1] == PLUGIN_URL_ARG
+    plugin = proxy["mcpServers"]["klayoutclaw"]
+    assert plugin["command"] == "/bin/sh"
+    assert plugin["args"] == [PLUGIN_LAUNCHER_ARG, DEFAULT_URL]
 
     skills_dir = ROOT / "skills" / "scripts"
     sys.path.insert(0, str(skills_dir))
@@ -245,6 +248,56 @@ def test_active_default_endpoint_contract():
     agent_source = (ROOT / "agent" / "src" / "agent.ts").read_text()
     assert "KLayout MCP ${config.klayout.url}" in agent_source
     assert 'connectedServers.push("klayout (KLayout MCP :8765)")' not in agent_source
+
+
+@pytest.mark.parametrize(
+    ("override", "expected_url"),
+    [
+        (None, DEFAULT_URL),
+        ("http://127.0.0.1:8766/mcp", "http://127.0.0.1:8766/mcp"),
+    ],
+)
+def test_actual_plugin_launcher_selects_endpoint(
+    tmp_path, override, expected_url
+):
+    """Run the checked-in launcher with a fake npx and inspect its exec args."""
+    args_file = tmp_path / "npx-args.txt"
+    fake_npx = tmp_path / "npx"
+    fake_npx.write_text(
+        '#!/bin/sh\nprintf "%s\\n" "$@" > "$ARGS_FILE"\n'
+    )
+    fake_npx.chmod(0o755)
+
+    plugin = json.loads((ROOT / ".mcp.json").read_text())["mcpServers"][
+        "klayoutclaw"
+    ]
+    args = [
+        arg.replace("${CLAUDE_PLUGIN_ROOT}", str(ROOT))
+        for arg in plugin["args"]
+    ]
+    env = os.environ.copy()
+    env["PATH"] = str(tmp_path)
+    env["ARGS_FILE"] = str(args_file)
+    if override is None:
+        env.pop("KLAYOUT_MCP_URL", None)
+    else:
+        env["KLAYOUT_MCP_URL"] = override
+
+    result = subprocess.run(
+        [plugin["command"], *args],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert args_file.read_text().splitlines() == [
+        "-y",
+        "mcp-remote",
+        expected_url,
+        "--allow-http",
+    ]
 
 
 @pytest.mark.parametrize(

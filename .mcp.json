@@ -1,11 +1,10 @@
 {
   "mcpServers": {
     "klayoutclaw": {
-      "command": "npx",
+      "command": "/bin/sh",
       "args": [
-        "mcp-remote",
-        "${KLAYOUT_MCP_URL:-http://127.0.0.1:8765/mcp}",
-        "--allow-http"
+        "${CLAUDE_PLUGIN_ROOT}/scripts/launch-mcp-remote.sh",
+        "http://127.0.0.1:8765/mcp"
       ]
     }
   }

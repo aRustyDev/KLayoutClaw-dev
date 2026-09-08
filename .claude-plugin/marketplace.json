@@ -11,7 +11,7 @@
       "name": "klayoutclaw-dev",
       "source": "./",
       "description": "Control KLayout from AI agents via MCP — geometry, display, image overlay, visual capture, nanodevice flake detection, GDS alignment, and routing skills",
-      "version": "0.6.0-dev.1",
+      "version": "0.6.0-dev.2",
       "keywords": ["klayout", "gds", "layout", "mcp", "chip-design", "nanodevice", "flake-detection", "autorouting"]
     }
   ]
