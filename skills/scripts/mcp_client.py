@@ -78,8 +78,8 @@ def _extract_mcp_url(cfg, source):
     2. Single-entry ``mcpServers`` block with an unknown label — trusted.
     3. Flat qlaybot ``klayout.json``: ``{"url": "...", ...}``.
 
-    Also falls back to a URL-shape heuristic when multiple entries exist
-    with no known label.
+    Also falls back to a server-label heuristic when multiple entries exist
+    with no exact known label.
 
     Parameters
     ----------
@@ -122,10 +122,12 @@ def _extract_mcp_url(cfg, source):
         if url:
             return url
 
-    # Multi-entry heuristic: any URL that looks like KlayoutClaw.
-    for entry in servers.values():
+    # Multi-entry heuristic: choose a server whose label identifies KLayout.
+    # Do not infer identity from the default port: custom ports are supported,
+    # and 8765 is also AnkiConnect's conventional port.
+    for key, entry in servers.items():
         url = _entry_url(entry)
-        if url and (":8765/mcp" in url or "klayout" in url.lower()):
+        if url and "klayout" in key.lower():
             return url
 
     raise KeyError(

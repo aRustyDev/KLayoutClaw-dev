@@ -152,8 +152,28 @@ export async function detectKLayout(url?: string): Promise<boolean> {
           timeout: 3000,
         },
         (res) => {
-          res.resume();
-          resolve(true);
+          if (res.statusCode !== 200) {
+            res.resume();
+            resolve(false);
+            return;
+          }
+          res.setEncoding("utf8");
+          let body = "";
+          res.on("data", (chunk: string) => {
+            body += chunk;
+            if (body.length > 64 * 1024) {
+              req.destroy();
+              resolve(false);
+            }
+          });
+          res.on("end", () => {
+            try {
+              const data = JSON.parse(body) as { status?: unknown; server?: unknown };
+              resolve(data.status === "ok" && data.server === "KlayoutClaw");
+            } catch {
+              resolve(false);
+            }
+          });
         },
       );
       req.on("error", () => resolve(false));

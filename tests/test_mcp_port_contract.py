@@ -127,12 +127,82 @@ def test_actual_server_macro_persists_bind_failure(monkeypatch):
     assert log[-1] == callback_state.startup_error
 
 
+def test_actual_server_macro_persists_invalid_port_failure(monkeypatch):
+    namespace, callback_state, log = _load_server_contract(listen_ok=True)
+    monkeypatch.setenv("KLAYOUT_MCP_PORT", "not-a-port")
+
+    server = namespace["KlayoutClawServer"]()
+
+    assert server.started is False
+    assert server.listen_calls == []
+    assert callback_state.server_port is None
+    assert "KLAYOUT_MCP_PORT" in callback_state.startup_error
+    assert log[-1] == callback_state.startup_error
+
+
 def test_ui_macro_uses_callback_port_and_persisted_startup_error():
     code = ET.parse(UI_MACRO).getroot().findtext("text")
     assert code is not None
     assert 'getattr(cb, "startup_error", None)' in code
-    assert 'format(port)' in code
-    assert 'cb.server_port is not None' in code
+
+    tree = ast.parse(code, filename=str(UI_MACRO))
+    selected = [
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name in {
+            "_set_status_running",
+            "_on_server_start",
+            "_on_error",
+        }
+    ]
+
+    class FakeLabel:
+        def __init__(self):
+            self.text = None
+            self.style = None
+
+        def setText(self, value):
+            self.text = value
+
+        def setStyleSheet(self, value):
+            self.style = value
+
+    class FakeTimer:
+        def __init__(self):
+            self.started = []
+            self.stops = 0
+
+        def start(self, delay):
+            self.started.append(delay)
+
+        def stop(self):
+            self.stops += 1
+
+    callback_state = types.SimpleNamespace(server_port=None, startup_error="bind failed")
+    label = FakeLabel()
+    timer = FakeTimer()
+    log = []
+    namespace = {
+        "sys": types.SimpleNamespace(modules={"_klayoutclaw": callback_state}),
+        "datetime": __import__("datetime"),
+        "_ui_status": label,
+        "_ui_timer": timer,
+        "_append_log": lambda text, success: log.append((text, success)),
+    }
+    exec(
+        compile(ast.Module(body=selected, type_ignores=[]), str(UI_MACRO), "exec"),
+        namespace,
+    )
+
+    namespace["_on_error"]("bind failed")
+    assert label.text == "MCP: Error \u25cf"
+    assert timer.started == []
+
+    namespace["_on_server_start"](8766)
+    assert label.text == "MCP: Running \u25cf :8766"
+    assert callback_state.startup_error is None
+
+    namespace["_on_error"]("transient request failure")
+    assert timer.started == [5000]
 
 
 def test_active_default_endpoint_contract():
@@ -157,3 +227,6 @@ def test_active_default_endpoint_contract():
         'process.env.KLAYOUT_MCP_URL ?? "http://127.0.0.1:8765/mcp"'
     ) == 2
 
+    agent_source = (ROOT / "agent" / "src" / "agent.ts").read_text()
+    assert "KLayout MCP ${config.klayout.url}" in agent_source
+    assert 'connectedServers.push("klayout (KLayout MCP :8765)")' not in agent_source

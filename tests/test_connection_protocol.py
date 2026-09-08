@@ -5,6 +5,7 @@ import pytest
 from test_connection import (
     identity_error,
     initialize_error,
+    run_connection_test,
     tools_error,
 )
 
@@ -73,3 +74,25 @@ def test_tools_check_reports_missing_required_tool():
     assert "get_layout_info" in tools_error(
         {"result": {"tools": [{"name": "create_layout"}]}}
     )
+
+
+def test_full_check_rejects_another_service_without_traceback(monkeypatch, capsys):
+    class FakeResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b'{"jsonrpc":"2.0","result":null}'
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda *_args, **_kwargs: FakeResponse())
+
+    assert run_connection_test("http://127.0.0.1:8765/mcp", wait_seconds=0.1) == 1
+    output = capsys.readouterr().out
+    assert "not KlayoutClaw" in output
+    assert "lsof -nP -iTCP:8765" in output
+    assert "Traceback" not in output

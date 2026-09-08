@@ -89,6 +89,7 @@ if "_klayoutclaw" not in sys.modules:
     _claw_cb.on_server_start = None  # fn(port)
     _claw_cb.on_error = None         # fn(error_msg)
     _claw_cb.server_port = None      # int, set when server starts
+    _claw_cb.startup_error = None    # str, persisted when startup fails
     sys.modules["_klayoutclaw"] = _claw_cb
 
 
@@ -2602,22 +2603,72 @@ def _http_response(status_code, body_str, extra_headers=None):
 # QTcpServer subclass
 # ---------------------------------------------------------------------------
 
+DEFAULT_MCP_PORT = 8765
+
+
+def _resolve_mcp_port(environ=None):
+    """Resolve and validate the KLayout listener port."""
+    if environ is None:
+        environ = os.environ
+    raw_port = environ.get("KLAYOUT_MCP_PORT")
+    if raw_port is None:
+        return DEFAULT_MCP_PORT
+    try:
+        port = int(raw_port)
+    except (TypeError, ValueError):
+        raise ValueError(
+            "KLAYOUT_MCP_PORT must be an integer from 1 to 65535; got {!r}".format(raw_port)
+        )
+    if port &lt; 1 or port &gt; 65535:
+        raise ValueError(
+            "KLAYOUT_MCP_PORT must be an integer from 1 to 65535; got {!r}".format(raw_port)
+        )
+    return port
+
+
 class KlayoutClawServer(pya.QTcpServer):
 
     def __init__(self, parent=None):
         super(KlayoutClawServer, self).__init__(parent)
-        _bind_addr = os.environ.get("KLAYOUT_MCP_BIND", "127.0.0.1")
-        ha = pya.QHostAddress(_bind_addr)
-        ok = self.listen(ha, 8765)
-        if not ok:
-            _log("ERROR: Failed to bind to {}:8765 — port may be in use".format(_bind_addr))
-            return
-        _log("MCP server listening on {}:8765".format(_bind_addr))
+        self.started = False
+        self.port = None
+        self.startup_error = None
         cb = sys.modules.get("_klayoutclaw")
         if cb:
-            cb.server_port = 8765
+            cb.server_port = None
+            cb.startup_error = None
+
+        _bind_addr = os.environ.get("KLAYOUT_MCP_BIND", "127.0.0.1")
+        try:
+            port = _resolve_mcp_port()
+        except ValueError as ex:
+            self.startup_error = "ERROR: {}".format(ex)
+            if cb:
+                cb.startup_error = self.startup_error
+            _log(self.startup_error)
+            return
+
+        ha = pya.QHostAddress(_bind_addr)
+        ok = self.listen(ha, port)
+        if not ok:
+            self.startup_error = (
+                "ERROR: Failed to bind to {}:{} — port may be in use. "
+                "Set KLAYOUT_MCP_PORT to a free port and configure clients with "
+                "the matching KLAYOUT_MCP_URL.".format(_bind_addr, port)
+            )
+            if cb:
+                cb.startup_error = self.startup_error
+            _log(self.startup_error)
+            return
+
+        self.started = True
+        self.port = port
+        _log("MCP server listening on {}:{}".format(_bind_addr, port))
+        if cb:
+            cb.server_port = port
+            cb.startup_error = None
             if cb.on_server_start:
-                cb.on_server_start(8765)
+                cb.on_server_start(port)
         self.newConnection(self.on_new_connection)
 
     def on_new_connection(self):
@@ -2753,7 +2804,12 @@ try:
         _f.write("CREATING SERVER...\n")
     _server = KlayoutClawServer()
     with open(_early_log, "a") as _f:
-        _f.write("SERVER CREATED OK\n")
+        if _server.started:
+            _f.write("SERVER CREATED OK on port {}\n".format(_server.port))
+        else:
+            _f.write("SERVER START FAILED: {}\n".format(
+                _server.startup_error or "unknown startup error"
+            ))
 except Exception as e:
     import traceback
     with open(_early_log, "a") as _f:
