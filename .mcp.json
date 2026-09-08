@@ -4,7 +4,7 @@
       "command": "npx",
       "args": [
         "mcp-remote",
-        "http://127.0.0.1:8765/mcp",
+        "${KLAYOUT_MCP_URL:-http://127.0.0.1:8765/mcp}",
         "--allow-http"
       ]
     }

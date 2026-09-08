@@ -22,7 +22,7 @@ _SKILLS_SCRIPTS = os.path.abspath(
 if _SKILLS_SCRIPTS not in sys.path:
     sys.path.insert(0, _SKILLS_SCRIPTS)
 
-from mcp_client import _extract_mcp_url  # noqa: E402
+from mcp_client import _entry_url, _extract_mcp_url  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -33,6 +33,23 @@ def test_resolves_legacy_klayoutclaw_label():
     """The plugin's own mcp_config.json shape must still work."""
     cfg = {"mcpServers": {"klayoutclaw": {"url": "http://127.0.0.1:8765/mcp"}}}
     assert _extract_mcp_url(cfg, "legacy.json") == "http://127.0.0.1:8765/mcp"
+
+
+def test_resolves_claude_env_default_argument(monkeypatch):
+    entry = {
+        "command": "npx",
+        "args": [
+            "mcp-remote",
+            "${KLAYOUT_MCP_URL:-http://127.0.0.1:8765/mcp}",
+            "--allow-http",
+        ],
+    }
+
+    monkeypatch.delenv("KLAYOUT_MCP_URL", raising=False)
+    assert _entry_url(entry) == "http://127.0.0.1:8765/mcp"
+
+    monkeypatch.setenv("KLAYOUT_MCP_URL", "http://127.0.0.1:8766/mcp")
+    assert _entry_url(entry) == "http://127.0.0.1:8766/mcp"
 
 
 def test_resolves_qlaybot_klayout_label():
@@ -105,16 +122,27 @@ def test_empty_mcp_servers_with_no_top_level_url_raises():
         _extract_mcp_url(cfg, "empty.json")
 
 
-def test_url_heuristic_resolves_klayout_named_url():
-    """Multi-entry config with one URL whose host/path mentions klayout."""
+def test_label_heuristic_resolves_custom_klayout_server():
+    """Multi-entry config resolves a custom label rather than a port hint."""
     cfg = {
         "mcpServers": {
             "other-mcp": {"url": "http://example.com/api"},
-            "weird-name": {"url": "http://127.0.0.1:8765/mcp"},
+            "my-dev-klayout": {"url": "http://127.0.0.1:8766/mcp"},
         }
     }
-    # The heuristic picks the entry with :8765/mcp.
-    assert _extract_mcp_url(cfg, "heur.json") == "http://127.0.0.1:8765/mcp"
+    assert _extract_mcp_url(cfg, "heur.json") == "http://127.0.0.1:8766/mcp"
+
+
+def test_default_port_does_not_identify_klayout_in_ambiguous_config():
+    """Port 8765 alone is not proof of identity because AnkiConnect uses it."""
+    cfg = {
+        "mcpServers": {
+            "anki": {"url": "http://127.0.0.1:8765/mcp"},
+            "other": {"url": "http://example.com/mcp"},
+        }
+    }
+    with pytest.raises(KeyError):
+        _extract_mcp_url(cfg, "ambiguous.json")
 
 
 # ---------------------------------------------------------------------------
