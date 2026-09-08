@@ -3,7 +3,9 @@
     "klayoutclaw": {
       "command": "/bin/sh",
       "args": [
-        "${CLAUDE_PLUGIN_ROOT}/scripts/launch-mcp-remote.sh",
+        "-c",
+        "if [ -n \"$KLAYOUT_MCP_URL\" ]; then mcp_url=\"$KLAYOUT_MCP_URL\"; else mcp_url=\"$1\"; fi; exec npx -y mcp-remote \"$mcp_url\" --allow-http",
+        "klayoutclaw-mcp",
         "http://127.0.0.1:8765/mcp"
       ]
     }
