@@ -14,7 +14,11 @@ Skills are Claude Code plugins that wrap KlayoutClaw MCP tools into task-oriente
 
 After installation the four core skills are directly invocable as `/klayoutclaw:{geometry,display,image,visual}`. The nanodevice pipelines (`nanodevice_flakedetect`, `nanodevice_gdsalign`, `nanodevice_routing`, `nanodevice_e2e_design`) and `klayout_gds_import` auto-load by description when the user's request matches — Claude picks them without a slash command.
 
-All scripts share a common MCP client (`skills/scripts/mcp_client.py`) that connects to KLayout at `127.0.0.1:8765`.
+All scripts share a common MCP client (`skills/scripts/mcp_client.py`) that
+connects to KLayout at `127.0.0.1:8765` by default. Set `KLAYOUT_MCP_URL` to a
+complete alternate URL. The KLayout listener is configured separately with
+`KLAYOUT_MCP_PORT`; when changing ports, set both values consistently and
+restart KLayout.
 
 ---
 
@@ -555,4 +559,6 @@ The canonical test suites live at the repo root in `tests/`:
 - `tests/test_e2e_*.sh` — shell-driven E2E bundles (regression, alt-device, crossing_pairs, material_overlap, route_override, non-Hall-bar, heavy-script). Run: `bash tests/test_e2e_regression.sh` to sweep every phase sequentially.
 - `tests/test_connection.sh`, `tests/test_hallbar.sh`, `tests/test_autoroute.sh` — legacy single-purpose E2E scripts.
 
-All suites require KLayout running with the KlayoutClaw plugin at `127.0.0.1:8765`.
+All suites require KLayout running with the KlayoutClaw plugin. They use
+`http://127.0.0.1:8765/mcp` by default and honor `KLAYOUT_MCP_URL` for an
+alternate endpoint.

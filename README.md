@@ -39,6 +39,31 @@ Point any MCP client at `http://127.0.0.1:8765/mcp`:
 claude mcp add --transport http klayoutclaw http://127.0.0.1:8765/mcp
 ```
 
+Port `8765` is retained as the compatibility default. To use another local
+port, configure both sides together and restart KLayout. For example, this
+keeps AnkiConnect on its conventional port `8765` and runs KlayoutClaw on
+`8766`:
+
+```bash
+launchctl setenv KLAYOUT_MCP_PORT 8766
+# Fully quit and reopen KLayout so the autorun macro sees the new value.
+open /Applications/klayout.app
+
+export KLAYOUT_MCP_URL=http://127.0.0.1:8766/mcp
+python tests/test_connection.py
+claude mcp add --transport http klayoutclaw "$KLAYOUT_MCP_URL"
+```
+
+Update an existing MCP-client entry rather than adding a duplicate. To restore
+the default for subsequently launched KLayout processes, run
+`launchctl unsetenv KLAYOUT_MCP_PORT` and restart KLayout.
+
+If the connection test reports that another service answered, inspect the
+listener with `lsof -nP -iTCP:8765 -sTCP:LISTEN`. AnkiConnect commonly owns
+that port. KlayoutClaw never scans for another port or stops the conflicting
+process; select a port explicitly with `KLAYOUT_MCP_PORT` and point clients at
+the same URL with `KLAYOUT_MCP_URL`.
+
 Then just ask:
 
 > *"Create a Hall bar with a 100×25 µm graphene channel, 6 side probes, and bonding pads. Save as hallbar.gds."*

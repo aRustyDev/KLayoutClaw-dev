@@ -65,7 +65,9 @@ def main():
 
     print("\nDone! No external Python dependencies needed (uses only stdlib + pya).")
     print("Restart KLayout to activate the MCP server.")
-    print("The server will be available at http://127.0.0.1:8765/mcp")
+    print("The server defaults to http://127.0.0.1:8765/mcp.")
+    print("Set KLAYOUT_MCP_PORT before launching KLayout and use the matching")
+    print("KLAYOUT_MCP_URL in clients to select a different local port.")
 
 
 if __name__ == "__main__":
