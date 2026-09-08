@@ -39,7 +39,20 @@ klayoutclaw status
 directory. It refuses to overwrite unowned or locally modified files unless
 the exact operation is repeated with `--force`. It also records the uv tool
 environment's Python interpreter for the optional workers; use
-`klayoutclaw doctor` to inspect that interpreter and its imports.
+`klayoutclaw doctor` to execute dependency imports in that interpreter and
+inspect structured diagnostics for import, launch, timeout, or output errors.
+
+Each owned file is staged beside its destination and replaced atomically. The
+operation is resumable rather than globally transactional: if a later write
+fails, already-replaced files remain valid and a repeated `install` adopts
+matching files before completing the manifest. A failure-injection test locks
+in this guarantee.
+
+For compatibility with the original installer, missing `plugin/__init__.py`
+and `tools/__init__.py` namespace markers are created as empty files. These are
+generic shared paths: existing files are never overwritten, the markers are
+not claimed in KlayoutClaw's ownership manifest, and uninstall never removes
+them.
 
 The `[workers]` extra is intentionally optional:
 

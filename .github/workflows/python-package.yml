@@ -59,3 +59,4 @@ jobs:
           "$UV_TOOL_BIN_DIR/klayoutclaw" install --target-dir "$KLAYOUT_TARGET"
           "$UV_TOOL_BIN_DIR/klayoutclaw" doctor --target-dir "$KLAYOUT_TARGET" --json > "$DOCTOR_REPORT"
           python -c 'import json,os,pathlib; r=json.loads(pathlib.Path(os.environ["DOCTOR_REPORT"]).read_text()); assert r["workers"]["status"] == "available"'
+          "$UV_TOOL_DIR/klayoutclaw/bin/python" -c 'import os,runpy; root=os.environ["KLAYOUT_TARGET"]; [runpy.run_path(os.path.join(root,name), run_name="__klayoutclaw_smoke__") for name in ("ordered_loop.py","two_level.py","route_worker.py","evaluate_worker.py")]'

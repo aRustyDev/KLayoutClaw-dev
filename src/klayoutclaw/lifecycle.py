@@ -18,7 +18,15 @@ from ._version import __version__
 
 INSTALL_MANIFEST = ".klayoutclaw-install.json"
 RUNTIME_CONFIG = "klayoutclaw-runtime.json"
-WORKER_IMPORTS = ("gdstk", "klayout", "numpy", "shapely", "skimage")
+COMPATIBILITY_MARKERS = ("plugin/__init__.py", "tools/__init__.py")
+WORKER_IMPORTS = {
+    "gdstk": "gdstk",
+    "klayout": "klayout.db",
+    "numpy": "numpy",
+    "shapely": "shapely.validation",
+    "skimage": "skimage.graph",
+}
+_PROBE_MARKER = "__KLAYOUTCLAW_IMPORT_PROBE__="
 
 
 class LifecycleError(RuntimeError):
@@ -223,6 +231,36 @@ def _preflight(
     return sorted(writes), sorted(removals), sorted(set(conflicts))
 
 
+def _missing_compatibility_markers(target: Path) -> list[str]:
+    """Return absent legacy namespace files without claiming existing files."""
+    missing = []
+    for relative in COMPATIBILITY_MARKERS:
+        _reject_symlink_parents(target, relative)
+        path = target / _safe_relative(relative)
+        if not path.exists() and not path.is_symlink():
+            missing.append(relative)
+    return missing
+
+
+def _create_compatibility_markers(target: Path, missing: list[str]) -> None:
+    """Create legacy import markers conditionally, leaving them unowned.
+
+    Previous installers created these generic namespace files. They may also
+    be shared by unrelated KLayout extensions, so they are deliberately absent
+    from the ownership manifest and are never removed by uninstall.
+    """
+    for relative in missing:
+        path = target / _safe_relative(relative)
+        try:
+            # Exclusive creation makes the no-overwrite guarantee hold even if
+            # another process creates this shared path after preflight.
+            with path.open("xb") as handle:
+                handle.flush()
+                os.fsync(handle.fileno())
+        except FileExistsError:
+            pass
+
+
 def install(
     target_dir: str | os.PathLike[str] | None = None,
     *,
@@ -245,6 +283,7 @@ def install(
 
     desired = _desired_files(target)
     writes, removals, conflicts = _preflight(target, desired, owned)
+    compatibility_missing = _missing_compatibility_markers(target)
     if conflicts and not force:
         joined = ", ".join(conflicts)
         raise LifecycleError(
@@ -259,7 +298,7 @@ def install(
         and set(owned) == set(desired)
         and all(owned[path] == _sha256(data) for path, data in desired.items())
     )
-    if not writes and not removals and manifest_current:
+    if not writes and not removals and not compatibility_missing and manifest_current:
         return {
             "status": "current",
             "target": str(target),
@@ -268,6 +307,7 @@ def install(
             "dry_run": dry_run,
             "written": [],
             "removed": [],
+            "compatibility_created": [],
         }
 
     if dry_run:
@@ -275,10 +315,13 @@ def install(
             "status": "would-install",
             "target": str(target),
             "version": __version__,
-            "changed": bool(writes or removals or not manifest_current),
+            "changed": bool(
+                writes or removals or compatibility_missing or not manifest_current
+            ),
             "dry_run": True,
             "written": writes,
             "removed": removals,
+            "compatibility_created": compatibility_missing,
         }
 
     existing_dirs = set()
@@ -297,6 +340,7 @@ def install(
             (target / _safe_relative(relative)).unlink()
         except FileNotFoundError:
             pass
+    _create_compatibility_markers(target, compatibility_missing)
 
     previous_created = (
         [] if previous_manifest is None else previous_manifest.get("created_dirs", [])
@@ -336,6 +380,7 @@ def install(
         "dry_run": False,
         "written": writes,
         "removed": removals,
+        "compatibility_created": compatibility_missing,
     }
 
 
@@ -480,26 +525,97 @@ def uninstall(
     }
 
 
-def _probe_worker_imports(interpreter: Path) -> dict[str, bool]:
-    probe = (
-        "import importlib.util,json; "
-        f"names={list(WORKER_IMPORTS)!r}; "
-        "print(json.dumps({name: importlib.util.find_spec(name) is not None for name in names}))"
-    )
-    completed = subprocess.run(
-        [str(interpreter), "-c", probe],
-        capture_output=True,
-        text=True,
-        timeout=20,
-        check=False,
-    )
-    if completed.returncode != 0:
-        return {name: False for name in WORKER_IMPORTS}
-    try:
-        result = json.loads(completed.stdout)
-    except json.JSONDecodeError:
-        return {name: False for name in WORKER_IMPORTS}
-    return {name: bool(result.get(name)) for name in WORKER_IMPORTS}
+def _probe_worker_imports(interpreter: Path) -> dict[str, dict[str, Any]]:
+    """Import every worker dependency and return per-module diagnostics."""
+    diagnostics = {}
+    for name, module in WORKER_IMPORTS.items():
+        probe = (
+            "import importlib,json; "
+            f"marker={_PROBE_MARKER!r}; module={module!r}; "
+            "result={'available':True,'status':'available','module':module}; "
+            "\ntry:\n importlib.import_module(module)"
+            "\nexcept BaseException as exc:\n result={'available':False,'status':'import-error',"
+            "'module':module,'error_type':type(exc).__name__,'message':str(exc)}"
+            "\nprint(marker+json.dumps(result,sort_keys=True))"
+        )
+        try:
+            completed = subprocess.run(
+                [str(interpreter), "-c", probe],
+                capture_output=True,
+                text=True,
+                timeout=20,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            diagnostics[name] = {
+                "available": False,
+                "status": "timeout",
+                "module": module,
+                "error_type": type(exc).__name__,
+                "message": f"import probe exceeded {exc.timeout} seconds",
+            }
+            continue
+        except (PermissionError, OSError) as exc:
+            diagnostics[name] = {
+                "available": False,
+                "status": "launch-error",
+                "module": module,
+                "error_type": type(exc).__name__,
+                "message": str(exc),
+            }
+            continue
+
+        encoded = next(
+            (
+                line.removeprefix(_PROBE_MARKER)
+                for line in reversed(completed.stdout.splitlines())
+                if line.startswith(_PROBE_MARKER)
+            ),
+            None,
+        )
+        if encoded is None:
+            diagnostics[name] = {
+                "available": False,
+                "status": (
+                    "process-error" if completed.returncode else "malformed-output"
+                ),
+                "module": module,
+                "returncode": completed.returncode,
+                "message": completed.stderr.strip() or "probe returned no JSON result",
+            }
+            continue
+        if completed.returncode != 0:
+            diagnostics[name] = {
+                "available": False,
+                "status": "process-error",
+                "module": module,
+                "returncode": completed.returncode,
+                "message": completed.stderr.strip() or "probe process failed",
+            }
+            continue
+        try:
+            result = json.loads(encoded)
+        except json.JSONDecodeError as exc:
+            diagnostics[name] = {
+                "available": False,
+                "status": "malformed-output",
+                "module": module,
+                "error_type": type(exc).__name__,
+                "message": str(exc),
+            }
+            continue
+        if not isinstance(result, dict) or not isinstance(
+            result.get("available"), bool
+        ):
+            diagnostics[name] = {
+                "available": False,
+                "status": "malformed-output",
+                "module": module,
+                "message": "probe JSON result has an invalid shape",
+            }
+            continue
+        diagnostics[name] = result
+    return diagnostics
 
 
 def doctor(target_dir: str | os.PathLike[str] | None = None) -> dict[str, Any]:
@@ -518,15 +634,33 @@ def doctor(target_dir: str | os.PathLike[str] | None = None) -> dict[str, Any]:
     worker_python = None if runtime is None else runtime.get("worker_python")
     interpreter = Path(worker_python) if isinstance(worker_python, str) else None
     interpreter_exists = bool(interpreter and interpreter.is_file())
-    imports = (
+    dependency_diagnostics = (
         _probe_worker_imports(interpreter)
         if interpreter is not None and interpreter_exists
-        else {name: False for name in WORKER_IMPORTS}
+        else {
+            name: {
+                "available": False,
+                "status": "interpreter-missing",
+                "module": module,
+                "message": "recorded worker interpreter is not available",
+            }
+            for name, module in WORKER_IMPORTS.items()
+        }
     )
+    imports = {
+        name: diagnostic["available"]
+        for name, diagnostic in dependency_diagnostics.items()
+    }
     if not interpreter_exists:
         worker_status = "interpreter-missing"
     elif all(imports.values()):
         worker_status = "available"
+    elif any(
+        diagnostic["status"]
+        in {"launch-error", "malformed-output", "process-error", "timeout"}
+        for diagnostic in dependency_diagnostics.values()
+    ):
+        worker_status = "probe-error"
     else:
         worker_status = "dependencies-missing"
     return {
@@ -538,5 +672,6 @@ def doctor(target_dir: str | os.PathLike[str] | None = None) -> dict[str, Any]:
             "status": worker_status,
             "python": worker_python,
             "imports": imports,
+            "dependency_diagnostics": dependency_diagnostics,
         },
     }

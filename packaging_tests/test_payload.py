@@ -9,6 +9,12 @@ from klayoutclaw import __version__
 
 ROOT = Path(__file__).resolve().parents[1]
 PAYLOAD = ROOT / "src" / "klayoutclaw" / "payload"
+EXPECTED_WORKER_DESTINATIONS = {
+    "evaluate_worker.py",
+    "ordered_loop.py",
+    "route_worker.py",
+    "two_level.py",
+}
 
 
 def _sync_module():
@@ -65,3 +71,15 @@ def test_distribution_version_is_synchronized() -> None:
         in server
     )
     assert f'"server": "KlayoutClaw", "version": "{protocol_version}"' in server
+
+
+def test_worker_payload_contract_is_complete_independently_of_sync_code() -> None:
+    manifest = json.loads((PAYLOAD / "manifest.json").read_text(encoding="utf-8"))
+    destinations = {entry["destination"] for entry in manifest["files"]}
+    actual_workers = {
+        destination
+        for destination in destinations
+        if destination.endswith("_worker.py")
+        or destination in {"ordered_loop.py", "two_level.py"}
+    }
+    assert actual_workers == EXPECTED_WORKER_DESTINATIONS

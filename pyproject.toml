@@ -6,7 +6,7 @@ build-backend = "uv_build"
 name = "klayoutclaw"
 version = "0.6.0"
 description = "KLayout GUI integration for AI agents over the Model Context Protocol"
-readme = "README.md"
+readme = "PYPI.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -48,6 +48,7 @@ Repository = "https://github.com/caidish/KlayoutClaw.git"
 
 [tool.uv.build-backend]
 source-include = [
+    "install.py",
     "scripts/sync_payload.py",
     "plugin/*.lym",
     "plugin/klayoutclaw_vc/**",

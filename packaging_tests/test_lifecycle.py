@@ -4,6 +4,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -44,6 +45,8 @@ def test_install_status_idempotency_and_uninstall(tmp_path: Path) -> None:
     removed = lifecycle.uninstall(target)
     assert removed["status"] == "uninstalled"
     assert foreign.read_text(encoding="utf-8") == "mine"
+    for relative in lifecycle.COMPATIBILITY_MARKERS:
+        assert (target / relative).read_bytes() == b""
     assert lifecycle.status(target)["status"] == "not-installed"
 
 
@@ -171,6 +174,106 @@ def test_doctor_reports_missing_recorded_interpreter(tmp_path: Path) -> None:
 
     report = lifecycle.doctor(target)
     assert report["workers"]["status"] == "interpreter-missing"
+    assert all(
+        item["status"] == "interpreter-missing"
+        for item in report["workers"]["dependency_diagnostics"].values()
+    )
+
+
+def test_legacy_namespace_markers_are_conditional_and_unowned(tmp_path: Path) -> None:
+    target = tmp_path / "pymacros"
+    plugin_marker = target / "plugin" / "__init__.py"
+    tools_marker = target / "tools" / "__init__.py"
+    plugin_marker.parent.mkdir(parents=True)
+    plugin_marker.write_text("# shared plugin marker\n", encoding="utf-8")
+
+    installed = lifecycle.install(target)
+    assert installed["compatibility_created"] == ["tools/__init__.py"]
+    assert plugin_marker.read_text(encoding="utf-8") == "# shared plugin marker\n"
+    assert tools_marker.read_bytes() == b""
+
+    manifest = json.loads((target / lifecycle.INSTALL_MANIFEST).read_text())
+    owned = {entry["path"] for entry in manifest["files"]}
+    assert not owned.intersection(lifecycle.COMPATIBILITY_MARKERS)
+
+    lifecycle.uninstall(target)
+    assert plugin_marker.read_text(encoding="utf-8") == "# shared plugin marker\n"
+    assert tools_marker.read_bytes() == b""
+
+
+def test_interrupted_install_is_resumable(tmp_path: Path, monkeypatch) -> None:
+    target = tmp_path / "pymacros"
+    real_atomic_write = lifecycle._atomic_write
+    calls = 0
+
+    def fail_third_write(path: Path, data: bytes) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 3:
+            raise OSError("injected write failure")
+        real_atomic_write(path, data)
+
+    with monkeypatch.context() as context:
+        context.setattr(lifecycle, "_atomic_write", fail_third_write)
+        with pytest.raises(OSError, match="injected write failure"):
+            lifecycle.install(target)
+
+    assert not (target / lifecycle.INSTALL_MANIFEST).exists()
+    assert any(target.rglob("*.py"))
+    resumed = lifecycle.install(target)
+    assert resumed["status"] == "installed"
+    assert lifecycle.status(target)["status"] == "current"
+
+
+@pytest.mark.parametrize(
+    "error", [OSError("cannot execute"), PermissionError("denied")]
+)
+def test_doctor_structures_probe_launch_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: OSError
+) -> None:
+    target = tmp_path / "pymacros"
+    lifecycle.install(target)
+
+    def fail_probe(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(lifecycle.subprocess, "run", fail_probe)
+    report = lifecycle.doctor(target)
+    assert report["workers"]["status"] == "probe-error"
+    assert all(
+        item["status"] == "launch-error"
+        for item in report["workers"]["dependency_diagnostics"].values()
+    )
+
+
+def test_doctor_structures_timeout_and_malformed_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "pymacros"
+    lifecycle.install(target)
+
+    def timeout(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=20)
+
+    monkeypatch.setattr(lifecycle.subprocess, "run", timeout)
+    timed_out = lifecycle.doctor(target)
+    assert all(
+        item["status"] == "timeout"
+        for item in timed_out["workers"]["dependency_diagnostics"].values()
+    )
+
+    monkeypatch.setattr(
+        lifecycle.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=0, stdout="not a probe result\n", stderr=""
+        ),
+    )
+    malformed = lifecycle.doctor(target)
+    assert all(
+        item["status"] == "malformed-output"
+        for item in malformed["workers"]["dependency_diagnostics"].values()
+    )
 
 
 def test_compatibility_wrapper_and_json_status(tmp_path: Path) -> None:

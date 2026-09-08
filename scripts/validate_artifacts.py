@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import tarfile
 import zipfile
@@ -19,13 +20,20 @@ FORBIDDEN_ROOTS = {
 SDIST_ROOTS = {
     "LICENSE",
     "PKG-INFO",
-    "README.md",
+    "PYPI.md",
+    "install.py",
     "plugin",
     "pyproject.toml",
     "pyproject.toml.orig",
     "scripts",
     "src",
     "tools",
+}
+EXPECTED_WORKER_DESTINATIONS = {
+    "evaluate_worker.py",
+    "ordered_loop.py",
+    "route_worker.py",
+    "two_level.py",
 }
 
 
@@ -37,6 +45,26 @@ def _payload_manifest(root: Path) -> dict:
 
 def _payload_resources(root: Path) -> set[str]:
     return {entry["resource"] for entry in _payload_manifest(root)["files"]}
+
+
+def _validate_worker_contract(root: Path) -> None:
+    """Check the worker set independently of the payload sync implementation."""
+    destinations = {entry["destination"] for entry in _payload_manifest(root)["files"]}
+    missing = EXPECTED_WORKER_DESTINATIONS - destinations
+    if missing:
+        raise SystemExit(f"payload manifest is missing workers: {sorted(missing)}")
+
+
+def _validate_long_description(root: Path) -> None:
+    readme = (root / "PYPI.md").read_text(encoding="utf-8")
+    local_markdown_images = re.findall(r"!\[[^]]*\]\((?!https?://)[^)]+\)", readme)
+    local_html_images = re.findall(
+        r"<img\b[^>]*\bsrc=[\"'](?!https?://)[^\"']+[\"']", readme, re.IGNORECASE
+    )
+    if local_markdown_images or local_html_images:
+        raise SystemExit(
+            "PYPI.md references local image assets excluded from artifacts"
+        )
 
 
 def validate_wheel(path: Path, root: Path) -> None:
@@ -91,6 +119,8 @@ def validate_sdist(path: Path, root: Path) -> None:
         PurePosixPath(*PurePosixPath(name).parts[1:]).as_posix() for name in names
     }
     required = {
+        "PYPI.md",
+        "install.py",
         "pyproject.toml",
         "scripts/sync_payload.py",
         "src/klayoutclaw/lifecycle.py",
@@ -141,6 +171,8 @@ def main(argv: list[str] | None = None) -> int:
     sdists = list(dist.glob("klayoutclaw-*.tar.gz"))
     if len(wheels) != 1 or len(sdists) != 1:
         raise SystemExit("expected exactly one KlayoutClaw wheel and one sdist")
+    _validate_worker_contract(root)
+    _validate_long_description(root)
     validate_wheel(wheels[0], root)
     validate_sdist(sdists[0], root)
     print(f"Validated {wheels[0].name} and {sdists[0].name}")

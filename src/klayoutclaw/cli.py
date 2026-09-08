@@ -83,6 +83,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"  write: {path}")
             for path in result["removed"]:
                 print(f"  remove stale: {path}")
+            for path in result.get("compatibility_created", []):
+                print(f"  create shared compatibility marker: {path}")
             if not args.dry_run:
                 print("Restart KLayout to load the installed macros.")
             return 0
