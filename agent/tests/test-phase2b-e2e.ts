@@ -8,7 +8,8 @@
  * persistence sinks (history JSONL and the verbose JSONL).
  *
  * Gated the same way as `test-e2e.ts`: ANTHROPIC_API_KEY + KLayout MCP at
- * :8765 + built dist/cli.js. Set `QLAYBOT_E2E=0` to force-skip.
+ * KLAYOUT_MCP_URL (default :8765) + built dist/cli.js. Set `QLAYBOT_E2E=0`
+ * to force-skip.
  *
  * Scoping decisions (documented per-test):
  *   - T3 is reduced to the headless-feasible surface (abandon path). The

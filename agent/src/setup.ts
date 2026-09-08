@@ -139,7 +139,7 @@ export async function validateApiKey(
  * Check if KLayout MCP server is reachable at the given URL.
  */
 export async function detectKLayout(url?: string): Promise<boolean> {
-  const target = url ?? "http://127.0.0.1:8765/mcp";
+  const target = url ?? process.env.KLAYOUT_MCP_URL ?? "http://127.0.0.1:8765/mcp";
 
   try {
     const parsed = new URL(target);
@@ -323,7 +323,7 @@ export async function runSetupWizard(options: WizardOptions): Promise<QlayBotCon
     },
     compaction: { ...DEFAULT_COMPACTION_CONFIG },
     klayout: {
-      url: mcpUrl ?? "http://127.0.0.1:8765/mcp",
+      url: mcpUrl ?? envVars.KLAYOUT_MCP_URL ?? "http://127.0.0.1:8765/mcp",
       required: true,
       autoLaunch: true,
       disabledTools: [],

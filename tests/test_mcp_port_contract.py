@@ -1,6 +1,7 @@
 """Regression tests for the MCP endpoint and KLayout macro startup contract."""
 
 import ast
+import importlib.util
 import json
 import os
 import sys
@@ -15,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SERVER_MACRO = ROOT / "plugin" / "klayoutclaw_server.lym"
 UI_MACRO = ROOT / "plugin" / "klayoutclaw_ui.lym"
 DEFAULT_URL = "http://127.0.0.1:8765/mcp"
+PLUGIN_URL_ARG = "${KLAYOUT_MCP_URL:-http://127.0.0.1:8765/mcp}"
 
 
 def _macro_tree(path: Path) -> ast.Module:
@@ -22,6 +24,19 @@ def _macro_tree(path: Path) -> ast.Module:
     code = ET.parse(path).getroot().findtext("text")
     assert code is not None
     return ast.parse(code, filename=str(path))
+
+
+def _load_module(relative_path: str, name: str):
+    """Load a first-party script so its real import-time config is exercised."""
+    spec = importlib.util.spec_from_file_location(name, ROOT / relative_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.modules.pop(name, None)
+    return module
 
 
 def _load_server_contract(listen_ok=True):
@@ -211,7 +226,7 @@ def test_active_default_endpoint_contract():
     assert direct["mcpServers"]["klayoutclaw"]["url"] == DEFAULT_URL
 
     proxy = json.loads((ROOT / ".mcp.json").read_text())
-    assert DEFAULT_URL in proxy["mcpServers"]["klayoutclaw"]["args"]
+    assert proxy["mcpServers"]["klayoutclaw"]["args"][1] == PLUGIN_URL_ARG
 
     skills_dir = ROOT / "skills" / "scripts"
     sys.path.insert(0, str(skills_dir))
@@ -230,3 +245,57 @@ def test_active_default_endpoint_contract():
     agent_source = (ROOT / "agent" / "src" / "agent.ts").read_text()
     assert "KLayout MCP ${config.klayout.url}" in agent_source
     assert 'connectedServers.push("klayout (KLayout MCP :8765)")' not in agent_source
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "attribute"),
+    [
+        ("tools/capture_demo.py", "MCP_URL"),
+        ("tools/capture_ml08_demo.py", "MCP_URL"),
+        ("skills/e2e_judge/scripts/harness.py", "KLAYOUT_MCP_URL"),
+        ("skills/e2e_judge/scripts/verifier.py", "KLAYOUT_URL"),
+    ],
+)
+def test_active_python_clients_honor_url_override(
+    monkeypatch, relative_path, attribute
+):
+    override = "http://127.0.0.1:8766/mcp"
+    monkeypatch.setenv("KLAYOUT_MCP_URL", override)
+
+    module = _load_module(relative_path, "_port_contract_" + attribute)
+
+    assert getattr(module, attribute) == override
+
+
+def test_shared_client_reads_actual_plugin_config(monkeypatch):
+    monkeypatch.delenv("KLAYOUT_MCP_URL", raising=False)
+    client = _load_module(
+        "skills/scripts/mcp_client.py", "_port_contract_mcp_client"
+    )
+
+    assert client.load_mcp_config(str(ROOT / ".mcp.json")) == DEFAULT_URL
+
+    override = "http://127.0.0.1:8766/mcp"
+    monkeypatch.setenv("KLAYOUT_MCP_URL", override)
+    assert client.load_mcp_config(str(ROOT / ".mcp.json")) == override
+
+
+def test_e2e_judge_passes_url_override_to_claude(monkeypatch):
+    override = "http://127.0.0.1:8766/mcp"
+    monkeypatch.setenv("KLAYOUT_MCP_URL", override)
+    harness = _load_module(
+        "skills/e2e_judge/scripts/harness.py", "_port_contract_harness"
+    )
+    observed = {}
+
+    def fake_run(cmd, **kwargs):
+        observed["cmd"] = cmd
+        return types.SimpleNamespace(stdout="ok", stderr="", returncode=0)
+
+    monkeypatch.setattr(harness.subprocess, "run", fake_run)
+    result = harness.run_agent("probe", agent="claude")
+
+    config_arg = observed["cmd"][observed["cmd"].index("--mcp-config") + 1]
+    config = json.loads(config_arg)
+    assert config["mcpServers"]["klayoutclaw"]["url"] == override
+    assert result.success

@@ -4,7 +4,8 @@
  * slash commands, planning mode, sandbox enforcement, background tasks, agent autonomy,
  * compaction, and workspace integrity.
  *
- * Auto-detects environment: ANTHROPIC_API_KEY + KLayout MCP at :8765 + built dist/cli.js.
+ * Auto-detects environment: ANTHROPIC_API_KEY + KLayout MCP at KLAYOUT_MCP_URL
+ * (default :8765) + built dist/cli.js.
  * Set QLAYBOT_E2E=0 to force-skip.
  */
 

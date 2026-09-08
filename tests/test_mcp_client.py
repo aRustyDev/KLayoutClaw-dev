@@ -22,7 +22,7 @@ _SKILLS_SCRIPTS = os.path.abspath(
 if _SKILLS_SCRIPTS not in sys.path:
     sys.path.insert(0, _SKILLS_SCRIPTS)
 
-from mcp_client import _extract_mcp_url  # noqa: E402
+from mcp_client import _entry_url, _extract_mcp_url  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -33,6 +33,23 @@ def test_resolves_legacy_klayoutclaw_label():
     """The plugin's own mcp_config.json shape must still work."""
     cfg = {"mcpServers": {"klayoutclaw": {"url": "http://127.0.0.1:8765/mcp"}}}
     assert _extract_mcp_url(cfg, "legacy.json") == "http://127.0.0.1:8765/mcp"
+
+
+def test_resolves_claude_env_default_argument(monkeypatch):
+    entry = {
+        "command": "npx",
+        "args": [
+            "mcp-remote",
+            "${KLAYOUT_MCP_URL:-http://127.0.0.1:8765/mcp}",
+            "--allow-http",
+        ],
+    }
+
+    monkeypatch.delenv("KLAYOUT_MCP_URL", raising=False)
+    assert _entry_url(entry) == "http://127.0.0.1:8765/mcp"
+
+    monkeypatch.setenv("KLAYOUT_MCP_URL", "http://127.0.0.1:8766/mcp")
+    assert _entry_url(entry) == "http://127.0.0.1:8766/mcp"
 
 
 def test_resolves_qlaybot_klayout_label():

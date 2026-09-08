@@ -215,7 +215,7 @@ _mcp_ok = _mcp_available()
 
 
 @pytest.mark.mcp
-@pytest.mark.skipif(not _mcp_ok, reason="KLayout MCP server not reachable at 127.0.0.1:8765")
+@pytest.mark.skipif(not _mcp_ok, reason=f"KLayout MCP server not reachable at {MCP_URL}")
 class TestStaleHandlesMCP:
     """MCP integration tests: create_layout twice then use other tools."""
 

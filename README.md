@@ -46,7 +46,8 @@ keeps AnkiConnect on its conventional port `8765` and runs KlayoutClaw on
 
 ```bash
 launchctl setenv KLAYOUT_MCP_PORT 8766
-# Fully quit and reopen KLayout so the autorun macro sees the new value.
+launchctl setenv KLAYOUT_MCP_URL http://127.0.0.1:8766/mcp
+# Fully quit and reopen KLayout and Claude Desktop so they see the new values.
 open /Applications/klayout.app
 
 export KLAYOUT_MCP_URL=http://127.0.0.1:8766/mcp
@@ -54,9 +55,17 @@ python tests/test_connection.py
 claude mcp add --transport http klayoutclaw "$KLAYOUT_MCP_URL"
 ```
 
-Update an existing MCP-client entry rather than adding a duplicate. To restore
-the default for subsequently launched KLayout processes, run
-`launchctl unsetenv KLAYOUT_MCP_PORT` and restart KLayout.
+The marketplace plugin's `.mcp.json` expands `KLAYOUT_MCP_URL`, so restarting
+Claude Desktop after the `launchctl setenv` command redirects the installed
+plugin without editing its cached files. Update any separately registered MCP
+entry rather than adding a duplicate. To restore the default for subsequently
+launched applications, unset both variables and restart KLayout and Claude
+Desktop:
+
+```bash
+launchctl unsetenv KLAYOUT_MCP_PORT
+launchctl unsetenv KLAYOUT_MCP_URL
+```
 
 If the connection test reports that another service answered, inspect the
 listener with `lsof -nP -iTCP:8765 -sTCP:LISTEN`. AnkiConnect commonly owns

@@ -197,7 +197,7 @@ class TestE2ESkillExists:
 # Module-level skipif for all MCP tests in classes marked with @pytest.mark.mcp
 _mcp_skip = pytest.mark.skipif(
     not _mcp_available(),
-    reason="KLayout MCP server not reachable at 127.0.0.1:8765",
+    reason=f"KLayout MCP server not reachable at {MCP_URL}",
 )
 
 

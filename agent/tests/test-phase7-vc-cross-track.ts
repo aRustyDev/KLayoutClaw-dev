@@ -17,7 +17,8 @@
  *         (hard — second `plan_drafted` marker).
  *
  * Both tests are gated on the same env surface as `test-phase2b-e2e.ts`:
- * ANTHROPIC_API_KEY + KLayout MCP reachable at :8765 + built dist/cli.js.
+ * ANTHROPIC_API_KEY + KLayout MCP reachable at KLAYOUT_MCP_URL (default :8765)
+ * + built dist/cli.js.
  * On CI miss they skip with an explicit reason.
  *
  * Soft-assertion convention (per spec §9.3):
