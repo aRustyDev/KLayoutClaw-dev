@@ -58,9 +58,11 @@ claude mcp add --transport http klayoutclaw "$KLAYOUT_MCP_URL"
 The marketplace plugin's `.mcp.json` expands `KLAYOUT_MCP_URL`, so restarting
 Claude Desktop after the `launchctl setenv` command redirects the installed
 plugin without editing its cached files. Update any separately registered MCP
-entry rather than adding a duplicate. To restore the default for subsequently
-launched applications, unset both variables and restart KLayout and Claude
-Desktop:
+entry rather than adding a duplicate. The generic `mcp_config.json` sample is
+intentionally static and portable: either edit its `url` directly or invoke it
+through a client that honors `KLAYOUT_MCP_URL`; it does not use Claude-specific
+environment interpolation. To restore the default for subsequently launched
+applications, unset both variables and restart KLayout and Claude Desktop:
 
 ```bash
 launchctl unsetenv KLAYOUT_MCP_PORT
