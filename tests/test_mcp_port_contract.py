@@ -4,7 +4,6 @@ import ast
 import importlib.util
 import json
 import os
-import subprocess
 import sys
 import types
 import xml.etree.ElementTree as ET
@@ -446,14 +445,13 @@ def test_active_default_endpoint_contract():
 
     proxy = json.loads((ROOT / ".mcp.json").read_text())
     plugin = proxy["mcpServers"]["klayoutclaw"]
-    assert plugin["command"] == "/bin/sh"
-    assert plugin["args"][0] == "-c"
-    assert plugin["args"][2:] == ["klayoutclaw-mcp", DEFAULT_URL]
-    shell_command = plugin["args"][1]
-    assert 'config_path="$KLAYOUT_MCP_CONFIG"' in shell_command
-    assert '$HOME/.klayout/klayoutclaw.json' in shell_command
-    assert 'exec npx -y mcp-remote "$mcp_url" --allow-http' in shell_command
-    assert "${" not in json.dumps(plugin)
+    assert plugin == {
+        "command": "uvx",
+        "args": ["--from", "klayoutclaw", "klayoutclaw-mcp"],
+    }
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'klayoutclaw-mcp = "klayoutclaw.mcp_bridge:main"' in pyproject
+    assert "mcp-remote" not in json.dumps(plugin)
 
     skills_dir = ROOT / "skills" / "scripts"
     sys.path.insert(0, str(skills_dir))
@@ -502,21 +500,10 @@ def test_active_default_endpoint_contract():
 def test_actual_plugin_launcher_selects_endpoint(
     tmp_path, override, server_config, expected_url
 ):
-    """Run the checked-in inline command and inspect its actual exec args."""
-    args_file = tmp_path / "npx-args.txt"
-    fake_npx = tmp_path / "npx"
-    fake_npx.write_text(
-        '#!/bin/sh\nprintf "%s\\n" "$@" > "$ARGS_FILE"\n'
-    )
-    fake_npx.chmod(0o755)
-    (tmp_path / "python3").symlink_to(sys.executable)
+    """Exercise the resolver used by the checked-in uvx launcher."""
+    from klayoutclaw.mcp_bridge import resolve_mcp_url
 
-    plugin = json.loads((ROOT / ".mcp.json").read_text())["mcpServers"][
-        "klayoutclaw"
-    ]
-    env = os.environ.copy()
-    env["PATH"] = str(tmp_path)
-    env["ARGS_FILE"] = str(args_file)
+    env = {}
     config_path = tmp_path / "klayoutclaw.json"
     env["KLAYOUT_MCP_CONFIG"] = str(config_path)
     if server_config is not None:
@@ -526,22 +513,7 @@ def test_actual_plugin_launcher_selects_endpoint(
     else:
         env["KLAYOUT_MCP_URL"] = override
 
-    result = subprocess.run(
-        [plugin["command"], *plugin["args"]],
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=5,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert args_file.read_text().splitlines() == [
-        "-y",
-        "mcp-remote",
-        expected_url,
-        "--allow-http",
-    ]
+    assert resolve_mcp_url(env) == expected_url
 
 
 @pytest.mark.parametrize(
@@ -564,8 +536,11 @@ def test_active_python_clients_honor_url_override(
     assert getattr(module, attribute) == override
 
 
-def test_shared_client_reads_actual_plugin_config(monkeypatch):
+def test_shared_client_reads_actual_plugin_config(monkeypatch, tmp_path):
     monkeypatch.delenv("KLAYOUT_MCP_URL", raising=False)
+    monkeypatch.setenv(
+        "KLAYOUT_MCP_CONFIG", str(tmp_path / "missing-user-config.json")
+    )
     client = _load_module(
         "skills/scripts/mcp_client.py", "_port_contract_mcp_client"
     )

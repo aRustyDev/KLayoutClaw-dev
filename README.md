@@ -109,13 +109,16 @@ or container-specific changes:
 `KLAYOUT_MCP_TLS_KEY_PASSPHRASE` supplies an optional private-key passphrase
 without requiring it to be stored in the JSON file.
 
-The marketplace plugin's `.mcp.json` uses an inline POSIX shell command that
-reads `KLAYOUT_MCP_URL` itself. It deliberately avoids plugin-root and
-`${VAR:-default}` placeholders because Claude Desktop may pass those arguments
-literally. Restarting Desktop after `launchctl setenv` redirects the installed
-plugin without editing its cached files. Update any separately registered MCP
-entry rather than adding a duplicate. To restore the file-derived client
-endpoint, unset the URL override and restart Claude Desktop:
+The marketplace plugin's `.mcp.json` launches the packaged pure-Python bridge
+with `uvx --from klayoutclaw klayoutclaw-mcp`. The bridge reads
+`KLAYOUT_MCP_URL`, then `KLAYOUT_MCP_CONFIG`, then
+`~/.klayout/klayoutclaw.json`, and finally uses the compatibility default. It
+forwards Claude Desktop's stdio MCP messages to KLayout's HTTP endpoint without
+requiring Node.js or `mcp-remote`. Restarting Desktop after `launchctl setenv`
+redirects the installed plugin without editing its cached files. Update any
+separately registered MCP entry rather than adding a duplicate. To restore the
+file-derived client endpoint, unset the URL override and restart Claude
+Desktop:
 
 ```bash
 launchctl unsetenv KLAYOUT_MCP_URL

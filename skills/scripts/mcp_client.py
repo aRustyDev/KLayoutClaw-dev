@@ -143,10 +143,12 @@ _KLAYOUT_ENV_DEFAULT_PREFIX = "${KLAYOUT_MCP_URL:-"
 def _entry_url(entry):
     """Extract the MCP server URL from a server entry dict.
 
-    Handles two shapes:
+    Handles three shapes:
     - Direct URL: ``{"url": "http://..."}``
     - stdio via mcp-remote: ``{"command": "npx", "args": ["mcp-remote", "http://...", ...]}``
       including Claude's ``${KLAYOUT_MCP_URL:-http://...}`` default expansion.
+    - stdio via the packaged ``klayoutclaw-mcp`` bridge, which shares this
+      client's environment/config/default endpoint contract.
 
     Returns the URL string, or None if not extractable.
     """
@@ -155,8 +157,14 @@ def _entry_url(entry):
     # Direct "url" field (HTTP/SSE transport).
     if "url" in entry:
         return entry["url"]
-    # stdio transport via mcp-remote: URL is the first http arg.
     args = entry.get("args") or []
+    if entry.get("command") == "uvx" and "klayoutclaw-mcp" in args:
+        return (
+            os.environ.get("KLAYOUT_MCP_URL")
+            or _local_server_config_url()
+            or _DEFAULT_URL
+        )
+    # stdio transport via mcp-remote: URL is the first http arg.
     for arg in args:
         if isinstance(arg, str) and arg.startswith("http"):
             return arg

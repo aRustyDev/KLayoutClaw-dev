@@ -33,7 +33,22 @@ local configuration.
 uv tool install --no-index --find-links dist klayoutclaw
 klayoutclaw install
 klayoutclaw status
+klayoutclaw-mcp  # stdio-to-HTTP MCP bridge; normally launched by a client
 ```
+
+Claude Desktop and other stdio-only MCP hosts can launch the bridge directly
+from PyPI without a persistent tool installation:
+
+```json
+{
+  "command": "uvx",
+  "args": ["--from", "klayoutclaw", "klayoutclaw-mcp"]
+}
+```
+
+The bridge uses only the Python standard library. It resolves the KLayout
+endpoint from `KLAYOUT_MCP_URL`, `KLAYOUT_MCP_CONFIG`, or the default
+`~/.klayout/klayoutclaw.json`, in that order.
 
 `klayoutclaw install` records file ownership and hashes in KLayout's macro
 directory. It refuses to overwrite unowned or locally modified files unless

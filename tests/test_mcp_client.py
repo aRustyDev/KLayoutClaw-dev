@@ -58,6 +58,22 @@ def test_resolves_claude_env_default_argument(monkeypatch):
     assert _entry_url(entry) == "http://127.0.0.1:8766/mcp"
 
 
+def test_resolves_packaged_uvx_bridge(monkeypatch, tmp_path):
+    entry = {
+        "command": "uvx",
+        "args": ["--from", "klayoutclaw", "klayoutclaw-mcp"],
+    }
+    config = tmp_path / "klayoutclaw.json"
+    config.write_text('{"mcp":{"port":8766}}', encoding="utf-8")
+    monkeypatch.delenv("KLAYOUT_MCP_URL", raising=False)
+    monkeypatch.setenv("KLAYOUT_MCP_CONFIG", str(config))
+
+    assert _entry_url(entry) == "http://127.0.0.1:8766/mcp"
+
+    monkeypatch.setenv("KLAYOUT_MCP_URL", "http://127.0.0.1:8767/custom")
+    assert _entry_url(entry) == "http://127.0.0.1:8767/custom"
+
+
 def test_resolves_qlaybot_klayout_label():
     """Regression: qlaybot writes its server under the 'klayout' key."""
     cfg = {"mcpServers": {"klayout": {"url": "http://127.0.0.1:8765/mcp"}}}

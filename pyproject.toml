@@ -40,6 +40,7 @@ workers = [
 
 [project.scripts]
 klayoutclaw = "klayoutclaw.cli:main"
+klayoutclaw-mcp = "klayoutclaw.mcp_bridge:main"
 
 [project.urls]
 Homepage = "https://github.com/caidish/KlayoutClaw"
