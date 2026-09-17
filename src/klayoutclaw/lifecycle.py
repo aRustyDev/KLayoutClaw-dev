@@ -18,6 +18,7 @@ from ._version import __version__
 
 INSTALL_MANIFEST = ".klayoutclaw-install.json"
 RUNTIME_CONFIG = "klayoutclaw-runtime.json"
+USER_CONFIG = "klayoutclaw.json"
 COMPATIBILITY_MARKERS = ("plugin/__init__.py", "tools/__init__.py")
 WORKER_IMPORTS = {
     "gdstk": "gdstk",
@@ -56,6 +57,36 @@ def default_target_dir(environ: dict[str, str] | None = None) -> Path:
     if configured_home:
         return Path(configured_home).expanduser() / "pymacros"
     return Path.home() / ".klayout" / "pymacros"
+
+
+def ensure_user_config(klayout_home: Path) -> tuple[Path, bool]:
+    """Create the editable server config once and preserve user changes."""
+    config_path = klayout_home.expanduser() / USER_CONFIG
+    if config_path.exists():
+        return config_path, False
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    contents = json.dumps(
+        {
+            "mcp": {
+                "bind": "127.0.0.1",
+                "port": 8765,
+                "endpoint": "/mcp",
+                "tls": False,
+                "certificate": "",
+                "private_key": "",
+                "key_algorithm": "rsa",
+            }
+        },
+        indent=2,
+    ) + "\n"
+    try:
+        with config_path.open("x", encoding="utf-8") as handle:
+            handle.write(contents)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except FileExistsError:
+        return config_path, False
+    return config_path, True
 
 
 def _safe_relative(value: str) -> Path:
@@ -271,6 +302,8 @@ def install(
     target = Path(target_dir) if target_dir is not None else default_target_dir()
     target = target.expanduser().resolve()
     manifest_path = target / INSTALL_MANIFEST
+    config_path = target.parent / USER_CONFIG
+    config_missing = not config_path.exists()
 
     try:
         previous_manifest = _read_json(manifest_path)
@@ -298,7 +331,13 @@ def install(
         and set(owned) == set(desired)
         and all(owned[path] == _sha256(data) for path, data in desired.items())
     )
-    if not writes and not removals and not compatibility_missing and manifest_current:
+    if (
+        not writes
+        and not removals
+        and not compatibility_missing
+        and manifest_current
+        and not config_missing
+    ):
         return {
             "status": "current",
             "target": str(target),
@@ -308,6 +347,8 @@ def install(
             "written": [],
             "removed": [],
             "compatibility_created": [],
+            "config_path": str(config_path),
+            "config_created": False,
         }
 
     if dry_run:
@@ -322,6 +363,9 @@ def install(
             "written": writes,
             "removed": removals,
             "compatibility_created": compatibility_missing,
+            "config_path": str(config_path),
+            "config_created": False,
+            "config_would_create": config_missing,
         }
 
     existing_dirs = set()
@@ -333,6 +377,7 @@ def install(
             parent = parent.parent
 
     target.mkdir(parents=True, exist_ok=True)
+    config_path, config_created = ensure_user_config(target.parent)
     for relative in writes:
         _atomic_write(target / _safe_relative(relative), desired[relative])
     for relative in removals:
@@ -381,6 +426,8 @@ def install(
         "written": writes,
         "removed": removals,
         "compatibility_created": compatibility_missing,
+        "config_path": str(config_path),
+        "config_created": config_created,
     }
 
 
