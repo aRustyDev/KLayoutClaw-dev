@@ -18,6 +18,12 @@ sources. Generated payload copies are verified by synchronization and artifact
 tests instead of being linted twice; broader legacy tests retain their existing
 style until that debt is addressed separately.
 
+GitHub's dependency-review API rejects fork repositories. On forks, the
+`Security` job records that limitation and still enforces pip-audit, Bandit,
+and zizmor. On the upstream non-fork repository, dependency review also runs
+and fails the gate for newly introduced vulnerabilities of moderate severity
+or higher.
+
 Also require the branch to be current, block force pushes and deletion, and
 require all conversations to be resolved. Workflows alone report checks; the
 repository ruleset is what makes them merge gates.

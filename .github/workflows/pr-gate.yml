@@ -55,9 +55,16 @@ jobs:
           persist-credentials: false
 
       - name: Review dependency changes
+        if: github.event.repository.fork == false
         uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
         with:
           fail-on-severity: moderate
+
+      - name: Explain dependency review limitation on forks
+        if: github.event.repository.fork
+        run: >-
+          echo "GitHub's dependency review API does not support fork repositories;
+          continuing with the resolved-dependency and source security scans."
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
