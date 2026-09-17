@@ -22,6 +22,13 @@ Also require the branch to be current, block force pushes and deletion, and
 require all conversations to be resolved. Workflows alone report checks; the
 repository ruleset is what makes them merge gates.
 
+For the one-time bootstrap, merge the pull request that introduces
+`pr-gate.yml` only after its recorded local validation and normal review.
+GitHub does not run a newly introduced `pull_request` workflow until that
+workflow exists on the default branch. Configure the required-check ruleset
+after this bootstrap merge so it cannot wait forever for checks that do not yet
+exist; every subsequent pull request will report the three checks above.
+
 ## Release GitHub App
 
 The default `GITHUB_TOKEN` cannot trigger the tag workflow from a tag it
