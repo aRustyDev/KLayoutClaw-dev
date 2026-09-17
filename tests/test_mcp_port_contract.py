@@ -17,7 +17,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SERVER_MACRO = ROOT / "plugin" / "klayoutclaw_server.lym"
 UI_MACRO = ROOT / "plugin" / "klayoutclaw_ui.lym"
 DEFAULT_URL = "http://127.0.0.1:8765/mcp"
-PLUGIN_LAUNCHER_ARG = "${CLAUDE_PLUGIN_ROOT}/scripts/launch-mcp-remote.sh"
+PLUGIN_SHELL_COMMAND = (
+    'if [ -n "$KLAYOUT_MCP_URL" ]; then mcp_url="$KLAYOUT_MCP_URL"; '
+    'else mcp_url="$1"; fi; '
+    'exec npx -y mcp-remote "$mcp_url" --allow-http'
+)
 
 
 def _macro_tree(path: Path) -> ast.Module:
@@ -229,7 +233,13 @@ def test_active_default_endpoint_contract():
     proxy = json.loads((ROOT / ".mcp.json").read_text())
     plugin = proxy["mcpServers"]["klayoutclaw"]
     assert plugin["command"] == "/bin/sh"
-    assert plugin["args"] == [PLUGIN_LAUNCHER_ARG, DEFAULT_URL]
+    assert plugin["args"] == [
+        "-c",
+        PLUGIN_SHELL_COMMAND,
+        "klayoutclaw-mcp",
+        DEFAULT_URL,
+    ]
+    assert "${" not in json.dumps(plugin)
 
     skills_dir = ROOT / "skills" / "scripts"
     sys.path.insert(0, str(skills_dir))
@@ -254,13 +264,14 @@ def test_active_default_endpoint_contract():
     ("override", "expected_url"),
     [
         (None, DEFAULT_URL),
+        ("", DEFAULT_URL),
         ("http://127.0.0.1:8766/mcp", "http://127.0.0.1:8766/mcp"),
     ],
 )
 def test_actual_plugin_launcher_selects_endpoint(
     tmp_path, override, expected_url
 ):
-    """Run the checked-in launcher with a fake npx and inspect its exec args."""
+    """Run the checked-in inline command and inspect its actual exec args."""
     args_file = tmp_path / "npx-args.txt"
     fake_npx = tmp_path / "npx"
     fake_npx.write_text(
@@ -271,10 +282,6 @@ def test_actual_plugin_launcher_selects_endpoint(
     plugin = json.loads((ROOT / ".mcp.json").read_text())["mcpServers"][
         "klayoutclaw"
     ]
-    args = [
-        arg.replace("${CLAUDE_PLUGIN_ROOT}", str(ROOT))
-        for arg in plugin["args"]
-    ]
     env = os.environ.copy()
     env["PATH"] = str(tmp_path)
     env["ARGS_FILE"] = str(args_file)
@@ -284,7 +291,7 @@ def test_actual_plugin_launcher_selects_endpoint(
         env["KLAYOUT_MCP_URL"] = override
 
     result = subprocess.run(
-        [plugin["command"], *args],
+        [plugin["command"], *plugin["args"]],
         env=env,
         capture_output=True,
         text=True,
