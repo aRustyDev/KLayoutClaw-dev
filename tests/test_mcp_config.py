@@ -1,6 +1,6 @@
 """Tests for configurable MCP connection in mcp_client.py.
 
-Tests the fallback order: --mcp-config flag -> .mcp.json in CWD -> mcp_config.json in project root -> default.
+Tests the legacy fallbacks after the per-user server config is absent.
 """
 import json
 import os
@@ -19,9 +19,13 @@ import mcp_client
 
 
 @pytest.fixture(autouse=True)
-def reset_mcp_url():
-    """Reset MCP_URL to default before each test."""
+def reset_mcp_url(tmp_path, monkeypatch):
+    """Reset MCP_URL and isolate tests from the host's per-user config."""
     original = mcp_client.MCP_URL
+    monkeypatch.delenv("KLAYOUT_MCP_URL", raising=False)
+    monkeypatch.setenv(
+        "KLAYOUT_MCP_CONFIG", str(tmp_path / "missing-user-config.json")
+    )
     yield
     mcp_client.MCP_URL = original
 

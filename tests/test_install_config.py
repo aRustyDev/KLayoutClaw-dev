@@ -1,15 +1,6 @@
-import importlib.util
 import json
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location(
-    "klayoutclaw_install", ROOT / "install.py"
-)
-assert SPEC is not None and SPEC.loader is not None
-INSTALL = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(INSTALL)
-ensure_user_config = INSTALL.ensure_user_config
+from klayoutclaw.lifecycle import ensure_user_config
 
 
 def test_installer_creates_default_user_config(tmp_path):
