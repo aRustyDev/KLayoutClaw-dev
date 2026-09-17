@@ -506,8 +506,7 @@ def test_actual_plugin_launcher_selects_endpoint(
     env = {}
     config_path = tmp_path / "klayoutclaw.json"
     env["KLAYOUT_MCP_CONFIG"] = str(config_path)
-    if server_config is not None:
-        config_path.write_text(json.dumps(server_config))
+    config_path.write_text(json.dumps(server_config or {"schema": 1, "mcp": {}}))
     if override is None:
         env.pop("KLAYOUT_MCP_URL", None)
     else:

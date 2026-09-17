@@ -9,6 +9,7 @@ def test_installer_creates_default_user_config(tmp_path):
     assert created is True
     assert config_path == tmp_path / "klayoutclaw.json"
     assert json.loads(config_path.read_text()) == {
+        "schema": 1,
         "mcp": {
             "bind": "127.0.0.1",
             "port": 8765,

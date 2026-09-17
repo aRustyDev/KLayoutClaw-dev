@@ -47,8 +47,26 @@ from PyPI without a persistent tool installation:
 ```
 
 The bridge uses only the Python standard library. It resolves the KLayout
-endpoint from `KLAYOUT_MCP_URL`, `KLAYOUT_MCP_CONFIG`, or the default
-`~/.klayout/klayoutclaw.json`, in that order.
+endpoint per field with this precedence:
+
+```text
+CLI flags > environment > config file > defaults
+```
+
+The config path independently resolves as `--config` >
+`KLAYOUT_MCP_CONFIG` > `~/.klayout/klayoutclaw.json`. An explicitly selected
+missing file is an error; an absent implicit default is valid. Inspect the
+effective non-secret values and their provenance with:
+
+```bash
+uvx --from klayoutclaw klayoutclaw-mcp --print-config
+```
+
+Supported endpoint flags are `--url`, `--bind`, `--port`, `--endpoint`, and
+`--tls`/`--no-tls`. The matching component environment variables are
+`KLAYOUT_MCP_BIND`, `KLAYOUT_MCP_PORT`, `KLAYOUT_MCP_ENDPOINT`, and
+`KLAYOUT_MCP_TLS`; `KLAYOUT_MCP_URL` remains the authoritative whole-endpoint
+environment override.
 
 `klayoutclaw install` records file ownership and hashes in KLayout's macro
 directory. It refuses to overwrite unowned or locally modified files unless

@@ -78,6 +78,7 @@ def validate_wheel(path: Path, root: Path) -> None:
             "klayoutclaw/__init__.py",
             "klayoutclaw/_version.py",
             "klayoutclaw/cli.py",
+            "klayoutclaw/config.py",
             "klayoutclaw/lifecycle.py",
             "klayoutclaw/mcp_bridge.py",
             "klayoutclaw/payload/__init__.py",
@@ -125,6 +126,7 @@ def validate_sdist(path: Path, root: Path) -> None:
         "pyproject.toml",
         "scripts/sync_payload.py",
         "src/klayoutclaw/lifecycle.py",
+        "src/klayoutclaw/config.py",
         "src/klayoutclaw/mcp_bridge.py",
     }
     manifest = _payload_manifest(root)

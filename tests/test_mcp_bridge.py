@@ -66,9 +66,10 @@ def test_resolve_url_from_user_config(tmp_path):
 
 
 def test_resolve_url_defaults_when_config_is_absent(tmp_path):
-    assert resolve_mcp_url(
-        {"KLAYOUT_MCP_CONFIG": str(tmp_path / "missing.json")}
-    ) == "http://127.0.0.1:8765/mcp"
+    with pytest.raises(BridgeError, match="does not exist"):
+        resolve_mcp_url(
+            {"KLAYOUT_MCP_CONFIG": str(tmp_path / "missing.json")}
+        )
 
 
 @pytest.mark.parametrize(

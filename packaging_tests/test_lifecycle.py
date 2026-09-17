@@ -34,7 +34,9 @@ def test_install_status_idempotency_and_uninstall(tmp_path: Path) -> None:
     config_path = target.parent / lifecycle.USER_CONFIG
     assert installed["config_path"] == str(config_path)
     assert installed["config_created"] is True
-    assert json.loads(config_path.read_text(encoding="utf-8"))["mcp"]["port"] == 8765
+    user_config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert user_config["schema"] == 1
+    assert user_config["mcp"]["port"] == 8765
     assert lifecycle.status(target)["status"] == "current"
     runtime = json.loads((target / lifecycle.RUNTIME_CONFIG).read_text())
     assert runtime["plugin_version"] == __version__

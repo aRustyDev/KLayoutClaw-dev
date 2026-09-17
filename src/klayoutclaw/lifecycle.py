@@ -15,6 +15,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from ._version import __version__
+from .config import CONFIG_SCHEMA
 
 INSTALL_MANIFEST = ".klayoutclaw-install.json"
 RUNTIME_CONFIG = "klayoutclaw-runtime.json"
@@ -67,6 +68,7 @@ def ensure_user_config(klayout_home: Path) -> tuple[Path, bool]:
     config_path.parent.mkdir(parents=True, exist_ok=True)
     contents = json.dumps(
         {
+            "schema": CONFIG_SCHEMA,
             "mcp": {
                 "bind": "127.0.0.1",
                 "port": 8765,

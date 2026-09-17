@@ -46,6 +46,7 @@ conventional port `8765` and runs KlayoutClaw on `8766`:
 
 ```json
 {
+  "schema": 1,
   "mcp": {
     "bind": "127.0.0.1",
     "port": 8766,
@@ -76,6 +77,7 @@ advertised URL. Set `tls` to `true` and provide PEM files:
 
 ```json
 {
+  "schema": 1,
   "mcp": {
     "bind": "127.0.0.1",
     "port": 9443,
@@ -92,12 +94,14 @@ Clients must trust the configured certificate and connect to
 `https://127.0.0.1:9443/secure-mcp`. TLS startup fails loudly when Qt lacks SSL
 support or either PEM file is missing. `key_algorithm` accepts `rsa` or `ec`.
 
-Environment variables override file values. This remains useful for temporary
-or container-specific changes:
+For the packaged `klayoutclaw-mcp` bridge, configuration resolves per field as
+CLI flags > environment > config file > defaults. Environment variables also
+override file values in the KLayout GUI server, which has no bridge CLI:
 
 | Config value | Environment override |
 |---|---|
 | config path | `KLAYOUT_MCP_CONFIG` |
+| complete client URL | `KLAYOUT_MCP_URL` |
 | `bind` | `KLAYOUT_MCP_BIND` |
 | `port` | `KLAYOUT_MCP_PORT` |
 | `endpoint` | `KLAYOUT_MCP_ENDPOINT` |
@@ -108,6 +112,20 @@ or container-specific changes:
 
 `KLAYOUT_MCP_TLS_KEY_PASSPHRASE` supplies an optional private-key passphrase
 without requiring it to be stored in the JSON file.
+
+The bridge accepts `--url`, `--config`, `--bind`, `--port`, `--endpoint`, and
+`--tls`/`--no-tls`. Specific component flags can refine `--url`. To diagnose
+precedence without starting the stdio transport:
+
+```bash
+uvx --from klayoutclaw klayoutclaw-mcp --print-config
+uvx --from klayoutclaw klayoutclaw-mcp \
+  --config ~/.klayout/klayoutclaw.json --port 8766 --print-config
+```
+
+The output contains only the effective endpoint and source of each value; it
+does not expose certificate, private-key, or passphrase settings. New user
+configs include `"schema": 1`; legacy files without a schema remain valid.
 
 The marketplace plugin's `.mcp.json` launches the packaged pure-Python bridge
 with `uvx --from klayoutclaw klayoutclaw-mcp`. The bridge reads

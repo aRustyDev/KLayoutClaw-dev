@@ -138,6 +138,7 @@ jobs:
           tests/test_mcp_client.py
           tests/test_mcp_config.py
           tests/test_mcp_bridge.py
+          tests/test_config.py
           tests/test_connection_protocol.py
           tests/test_server_bind.py
 
