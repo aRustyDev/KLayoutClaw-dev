@@ -113,7 +113,7 @@ jobs:
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: |
           python scripts/set_version.py --check "$RELEASE_VERSION"
-          uv run --isolated --no-project --with pytest pytest -q packaging_tests tests/test_release_version.py
+          uv run --isolated --no-project --with pytest --with numpy pytest -q packaging_tests tests/test_release_version.py
           uv build --no-sources
           uv run --isolated --no-project python scripts/validate_artifacts.py dist
 
