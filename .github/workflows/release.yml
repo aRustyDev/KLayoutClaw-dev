@@ -50,6 +50,7 @@ jobs:
         run: >-
           uv run --isolated --no-project
           --with pytest
+          --with numpy
           pytest -q packaging_tests tests/test_release_version.py
 
       - name: Build distributions
