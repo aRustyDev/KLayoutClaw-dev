@@ -31,6 +31,10 @@ def test_install_status_idempotency_and_uninstall(tmp_path: Path) -> None:
 
     installed = lifecycle.install(target)
     assert installed["status"] == "installed"
+    config_path = target.parent / lifecycle.USER_CONFIG
+    assert installed["config_path"] == str(config_path)
+    assert installed["config_created"] is True
+    assert json.loads(config_path.read_text(encoding="utf-8"))["mcp"]["port"] == 8765
     assert lifecycle.status(target)["status"] == "current"
     runtime = json.loads((target / lifecycle.RUNTIME_CONFIG).read_text())
     assert runtime["plugin_version"] == __version__
@@ -40,10 +44,12 @@ def test_install_status_idempotency_and_uninstall(tmp_path: Path) -> None:
     repeated = lifecycle.install(target)
     assert repeated["status"] == "current"
     assert repeated["changed"] is False
+    assert repeated["config_created"] is False
     assert _snapshot(target) == before
 
     removed = lifecycle.uninstall(target)
     assert removed["status"] == "uninstalled"
+    assert config_path.exists()
     assert foreign.read_text(encoding="utf-8") == "mine"
     for relative in lifecycle.COMPATIBILITY_MARKERS:
         assert (target / relative).read_bytes() == b""
@@ -54,7 +60,20 @@ def test_dry_run_never_creates_target(tmp_path: Path) -> None:
     target = tmp_path / "missing"
     result = lifecycle.install(target, dry_run=True)
     assert result["status"] == "would-install"
+    assert result["config_would_create"] is True
     assert not target.exists()
+    assert not (target.parent / lifecycle.USER_CONFIG).exists()
+
+
+def test_install_preserves_existing_user_config(tmp_path: Path) -> None:
+    target = tmp_path / "pymacros"
+    config_path = tmp_path / lifecycle.USER_CONFIG
+    config_path.write_text('{"mcp":{"port":8766}}\n', encoding="utf-8")
+
+    result = lifecycle.install(target)
+
+    assert result["config_created"] is False
+    assert config_path.read_text(encoding="utf-8") == '{"mcp":{"port":8766}}\n'
 
 
 def test_uninstall_dry_run_writes_nothing(tmp_path: Path) -> None:

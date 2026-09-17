@@ -85,6 +85,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"  remove stale: {path}")
             for path in result.get("compatibility_created", []):
                 print(f"  create shared compatibility marker: {path}")
+            if args.dry_run and result.get("config_would_create"):
+                print(f"  would create user config: {result['config_path']}")
+            elif not args.dry_run:
+                action = "Created" if result["config_created"] else "Preserved"
+                print(f"{action} user config: {result['config_path']}")
             if not args.dry_run:
                 print("Restart KLayout to load the installed macros.")
             return 0
